@@ -1,0 +1,26 @@
+# Core
+torch>=2.2,<3.0
+numpy>=1.24
+
+# Tokenization
+sentencepiece>=0.2.0
+tiktoken>=0.6.0
+
+# Data
+datasets>=2.18.0
+
+# Config
+PyYAML>=6.0
+
+# Chatbot interface
+gradio>=4.0
+
+# Voice-to-text
+SpeechRecognition>=3.10
+# Optional STT extras (install as needed for your chosen backend):
+#   pip install pyaudio            # microphone capture for the CLI (needs portaudio)
+#   pip install openai-whisper     # offline transcription backend (--stt-backend whisper)
+#   pip install pocketsphinx       # offline transcription backend (--stt-backend sphinx)
+
+# Testing
+pytest>=8.0

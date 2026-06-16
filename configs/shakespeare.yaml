@@ -1,0 +1,62 @@
+# Tiny Shakespeare, trained on a SMALL subset of input.txt.
+# Uses the dependency-free byte (≈character-level) tokenizer and an in-memory
+# packed dataset, so no network or tokenizer training is required.
+#
+#   python train.py --config configs/shakespeare.yaml
+#
+# `data.max_chars` controls how much of input.txt is used. Raise/lower it to
+# train on more/less data.
+
+seed: 42
+device: auto          # auto | cpu | cuda | mps
+
+tokenizer:
+  backend: byte
+
+data:
+  local_path: input.txt
+  max_chars: 50000     # small subset: first 50k characters of the file
+  val_fraction: 0.1    # hold out the last 10% for validation
+  seq_len: 128
+  add_eos: false
+  num_workers: 0
+
+model:
+  vocab_size: 259      # byte tokenizer: 256 bytes + 3 special tokens
+  d_model: 128
+  n_layers: 4
+  n_heads: 4
+  max_seq_len: 128
+  mlp_ratio: 4
+  attn_type: spiking   # spiking | standard (override with --attn-type)
+  n_timesteps: 1
+  causal: true
+  dropout: 0.1
+  tie_embeddings: true
+
+training:
+  batch_size: 16
+  lr: 1.0e-3
+  weight_decay: 0.1
+  betas: [0.9, 0.95]
+  grad_clip: 1.0
+  grad_accum_steps: 1
+  epochs: 50
+  max_steps: 600
+  warmup_steps: 50
+  min_lr_ratio: 0.1
+  amp: false
+  amp_dtype: bfloat16
+  log_interval: 20
+  eval_interval: 150
+  eval_max_batches: 20
+  save_interval: 300
+  checkpoint_dir: checkpoints
+  ignore_index: -100
+
+generation:
+  max_new_tokens: 300
+  temperature: 0.8
+  top_k: 40
+  top_p: 0.95
+  greedy: false
