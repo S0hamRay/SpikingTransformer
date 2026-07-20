@@ -15,6 +15,18 @@ PyYAML>=6.0
 # Chatbot interface
 gradio>=4.0
 
+# RAG (LangGraph + Ollama + Chroma)
+langgraph>=0.2
+langchain-core>=0.3
+langchain-community>=0.3
+langchain-ollama>=0.2
+langchain-text-splitters>=0.3
+chromadb>=0.5
+python-dotenv>=1.0
+pypdf>=4.0
+psycopg[binary]>=3.1
+neo4j>=5.0
+
 # Voice-to-text
 SpeechRecognition>=3.10
 # Optional STT extras (install as needed for your chosen backend):

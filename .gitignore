@@ -19,6 +19,10 @@ runs/
 # Datasets / caches
 data_cache/
 .cache/
+rag_data/
+
+# Secrets / local env
+.env
 
 # OS / editor
 .DS_Store
