@@ -15,12 +15,13 @@ PyYAML>=6.0
 # Chatbot interface
 gradio>=4.0
 
-# RAG (LangGraph + Ollama + Chroma)
+# RAG (LangGraph + Ollama + Chroma + Tavily CRAG)
 langgraph>=0.2
 langchain-core>=0.3
 langchain-community>=0.3
 langchain-ollama>=0.2
 langchain-text-splitters>=0.3
+langchain-tavily>=0.2
 chromadb>=0.5
 python-dotenv>=1.0
 pypdf>=4.0

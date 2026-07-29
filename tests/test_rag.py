@@ -9,7 +9,12 @@ import pytest
 from langchain_core.documents import Document
 
 from rag.engine import RAGEngine, default_rag_dir
-from rag.graph import build_rag_graph
+from rag.graph import (
+    build_rag_graph,
+    build_retrieve_node,
+    initial_rag_state,
+    route_after_grade,
+)
 from rag.ingest import (
     chunk_text,
     ingest_files,
@@ -18,6 +23,7 @@ from rag.ingest import (
     read_plaintext,
 )
 from rag.store import VectorStore
+from rag.web_search import format_tavily_results, tavily_configured
 
 
 class FakeEmbeddings:
@@ -131,16 +137,54 @@ def test_similarity_search_returns_documents(tmp_path: Path) -> None:
     assert "spiking" in results[0].page_content
 
 
-def test_rag_graph_generate_without_context(tmp_path: Path) -> None:
+def test_web_search_without_key_explains_setup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rag.graph import build_web_search_node
+
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    with patch("rag.graph.tavily_configured", return_value=False):
+        out = build_web_search_node()(initial_rag_state("What is spiking?"))
+    assert "TAVILY_API_KEY" in out["answer"]
+
+
+def test_crag_graph_routes_to_web_when_docs_irrelevant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store = _make_store(tmp_path)
-    graph = build_rag_graph(store)
-    result = graph.invoke({"question": "What is spiking?", "context": "", "answer": ""})
-    assert "No documents have been indexed" in result["answer"]
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+    with (
+        patch(
+            "rag.graph.build_grade_documents_node",
+            return_value=lambda state: {
+                "documents": [],
+                "context": "",
+                "needs_web": "yes",
+            },
+        ),
+        patch(
+            "rag.graph.build_rewrite_query_node",
+            return_value=lambda state: {"search_query": "rewritten query"},
+        ),
+        patch(
+            "rag.graph.tavily_search",
+            return_value="Web: spiking transformers use event-driven spikes.",
+        ),
+        patch(
+            "rag.graph.build_generate_node",
+            return_value=lambda state: {
+                "answer": f"Answer from: {state.get('context', '')}"
+            },
+        ),
+    ):
+        graph = build_rag_graph(store)
+        result = graph.invoke(initial_rag_state("What is spiking?"))
+
+    assert "event-driven" in result["answer"].lower()
 
 
 def test_retrieve_node_finds_relevant_context(tmp_path: Path) -> None:
-    from rag.graph import build_retrieve_node
-
     store = _make_store(tmp_path)
     store.add_documents(
         [
@@ -149,8 +193,46 @@ def test_retrieve_node_finds_relevant_context(tmp_path: Path) -> None:
         ]
     )
     retrieve = build_retrieve_node(store, top_k=1)
-    result = retrieve({"question": "Tell me about spiking", "context": "", "answer": ""})
+    result = retrieve(initial_rag_state("Tell me about spiking"))
     assert "spiking" in result["context"].lower()
+
+
+def test_route_after_grade() -> None:
+    assert route_after_grade({"needs_web": "yes"}) == "rewrite_query"
+    assert route_after_grade({"needs_web": "no"}) == "generate"
+
+
+def test_format_tavily_results() -> None:
+    text = format_tavily_results(
+        {
+            "results": [
+                {
+                    "title": "Spiking nets",
+                    "url": "https://example.com",
+                    "content": "Binary spikes.",
+                }
+            ]
+        }
+    )
+    assert "Spiking nets" in text
+    assert "Binary spikes." in text
+
+
+def test_tavily_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    assert tavily_configured() is False
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+    assert tavily_configured() is True
+
+
+def test_web_search_node_uses_tavily(monkeypatch: pytest.MonkeyPatch) -> None:
+    from rag.graph import build_web_search_node
+
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+    with patch("rag.graph.tavily_search", return_value="web snippet about spikes"):
+        node = build_web_search_node()
+        out = node(initial_rag_state("What are spikes?"))
+    assert "web snippet" in out["context"]
 
 
 def test_rag_engine_ingest_and_reply(tmp_path: Path, sample_txt: Path) -> None:

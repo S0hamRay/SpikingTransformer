@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from rag.graph import build_rag_graph
+from rag.graph import build_rag_graph, initial_rag_state
 from rag.ingest import SUPPORTED_SUFFIXES, ingest_files
 from rag.store import VectorStore
 
@@ -96,9 +96,7 @@ class RAGEngine:
             return ""
 
         try:
-            result = self.graph.invoke(
-                {"question": user_text, "context": "", "answer": ""}
-            )
+            result = self.graph.invoke(initial_rag_state(user_text))
             reply = str(result.get("answer", "")).strip()
         except Exception as exc:  # noqa: BLE001 - surface Ollama/network errors in UI
             reply = (

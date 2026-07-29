@@ -2,9 +2,11 @@
 
 A minimal chatbot with options to use addition only spiking self attention (faster training and fine tuning on neuromorphic hardware) or regular self attention. Persists conversation history via JSON files, supports web interface via Gradio, supports voice to text via SpeechRecognition.
 
-## RAG mode (LangGraph + Ollama)
+## RAG mode (LangGraph + Ollama + Tavily CRAG)
 
-The Gradio UI includes a third **RAG** chat mode. Upload `.txt` or `.pdf` files, index them into a local Chroma vector store, and ask questions answered by a local Ollama model via a LangGraph retrieve-then-generate pipeline.
+The Gradio UI includes a third **RAG** chat mode. Upload `.txt` or `.pdf` files, index them into a local Chroma vector store, and ask questions answered by a local Ollama model via a LangGraph **corrective RAG** pipeline:
+
+`retrieve → grade documents → generate` (or, if retrieval is weak, `rewrite query → Tavily web search → generate`).
 
 When Postgres and Neo4j are running, ingested documents are also written into an academic paper graph (Paper / Author / Chunk / …) for future Graph RAG.
 
@@ -20,7 +22,11 @@ When Postgres and Neo4j are running, ingested documents are also written into an
    ```bash
    pip install -r requirements.txt
    ```
-4. Optional: copy `.env.example` to `.env` to override model names or DB settings.
+4. Copy `.env.example` to `.env`. For corrective web search, set:
+   ```bash
+   TAVILY_API_KEY=tvly-...
+   ```
+   Get a key at [tavily.com](https://tavily.com). Without it, RAG still works from uploaded docs; web-search correction is disabled.
 
 ### Run RAG chat
 
