@@ -75,8 +75,10 @@ class RAGEngine:
                 for paper in papers:
                     result = sync_paper_ingest(paper)
                     if result.get("synced"):
+                        n_concepts = len(result.get("concept_ids") or [])
                         sync_notes.append(
                             f"{paper['filename']}→paper {result['paper_id'][:8]}…"
+                            f" ({n_concepts} concepts)"
                         )
                     elif result.get("reason"):
                         sync_notes.append(f"{paper['filename']}: {result['reason']}")

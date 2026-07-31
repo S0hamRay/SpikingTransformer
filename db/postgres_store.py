@@ -252,6 +252,53 @@ class PostgresStore:
             )
             return cur.fetchone()["id"]
 
+    def link_method(self, paper_id: UUID, concept_id: UUID) -> None:
+        with self.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO paper_methods (paper_id, concept_id)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (paper_id, concept_id),
+            )
+
+    def link_chunk_concept(self, chunk_id: UUID, concept_id: UUID) -> None:
+        with self.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO chunk_concepts (chunk_id, concept_id)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (chunk_id, concept_id),
+            )
+
+    def link_dataset(self, paper_id: UUID, dataset_id: UUID) -> None:
+        with self.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO paper_datasets (paper_id, dataset_id)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (paper_id, dataset_id),
+            )
+
+    def link_metric(
+        self, paper_id: UUID, concept_id: UUID, value: str | None = None
+    ) -> None:
+        with self.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO paper_metrics (paper_id, concept_id, value)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (paper_id, concept_id) DO UPDATE
+                  SET value = COALESCE(EXCLUDED.value, paper_metrics.value)
+                """,
+                (paper_id, concept_id, value),
+            )
+
 
 def _schema_without_vector(sql: str) -> str:
     """Strip pgvector usage so schema can init on plain Postgres."""

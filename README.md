@@ -67,7 +67,7 @@ docker compose up -d neo4j
 python scripts/init_db.py
 ```
 
-Concepts must already be linked via `USES_METHOD` and/or `HAS_CHUNK → MENTIONS`. Then:
+On ingest, basic entity extraction (lexicon + metric regex in `db/entity_extraction.py`) links Concepts via `USES_METHOD` and/or `HAS_CHUNK → MENTIONS`. Then:
 
 ```bash
 python scripts/run_leiden.py
