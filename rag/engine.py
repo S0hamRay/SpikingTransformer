@@ -59,10 +59,14 @@ class RAGEngine:
         try:
             added, indexed, papers = ingest_files(self.store, valid)
         except Exception as exc:  # noqa: BLE001 - surface Ollama/network errors in UI
-            return (
-                f"Indexing failed: {exc}. "
-                "Is Ollama running? Try: ollama serve"
+            hint = (
+                "Is Ollama running with the embed model pulled?\n"
+                "  ollama serve\n"
+                "  ollama pull nomic-embed-text\n"
+                "If you still see connection-reset errors, retry indexing "
+                "(the embed runner sometimes crashes on the first large batch)."
             )
+            return f"Indexing failed: {exc}\n\n{hint}"
 
         if not indexed:
             return "No readable content found in the uploaded files."
@@ -110,10 +114,16 @@ class RAGEngine:
         self._save_history()
         return reply
 
-    def reset(self) -> None:
-        """Clear chat history and the vector index."""
+    def reset(self, *, clear_index: bool = False) -> None:
+        """Clear chat history.
+
+        Args:
+            clear_index: If True, also wipe the vector store. Defaults to False
+                so "Clear conversation" in the UI does not delete indexed papers.
+        """
         self.history = []
-        self.store.reset()
+        if clear_index:
+            self.store.reset()
         self._save_history()
 
     def _load_history(self) -> None:

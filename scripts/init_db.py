@@ -3,7 +3,13 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from dotenv import load_dotenv
+
+# Allow running as `python scripts/init_db.py` from the repo root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from db.neo4j_store import Neo4jGraphStore
 from db.postgres_store import PostgresStore

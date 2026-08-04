@@ -9,7 +9,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class PostgresConfig:
     host: str = "localhost"
-    port: int = 5432
+    port: int = 5433
     user: str = "rag"
     password: str = "rag"
     database: str = "academic_rag"
@@ -18,7 +18,7 @@ class PostgresConfig:
     def from_env(cls) -> "PostgresConfig":
         return cls(
             host=os.getenv("POSTGRES_HOST", "localhost"),
-            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            port=int(os.getenv("POSTGRES_PORT", "5433")),
             user=os.getenv("POSTGRES_USER", "rag"),
             password=os.getenv("POSTGRES_PASSWORD", "rag"),
             database=os.getenv("POSTGRES_DB", "academic_rag"),

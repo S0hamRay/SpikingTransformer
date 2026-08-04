@@ -53,6 +53,42 @@ def _make_store(tmp_path: Path) -> VectorStore:
     return VectorStore(persist_dir=tmp_path / "chroma", embeddings=FakeEmbeddings())
 
 
+def test_ollama_batched_embeddings_batches_and_truncates() -> None:
+    from rag.store import OllamaBatchedEmbeddings
+
+    emb = OllamaBatchedEmbeddings(batch_size=2, retries=2)
+    client = MagicMock()
+    client.embed.side_effect = [
+        {"embeddings": [[0.1], [0.2]]},
+        {"embeddings": [[0.3]]},
+    ]
+    emb._client = client
+
+    out = emb.embed_documents(["a", "b", "c"])
+    assert out == [[0.1], [0.2], [0.3]]
+    assert client.embed.call_count == 2
+    first_kwargs = client.embed.call_args_list[0].kwargs
+    assert first_kwargs["truncate"] is True
+    assert first_kwargs["options"]["num_ctx"] == 2048
+
+
+def test_ollama_batched_embeddings_retries_then_succeeds() -> None:
+    from rag.store import OllamaBatchedEmbeddings
+
+    emb = OllamaBatchedEmbeddings(batch_size=8, retries=3)
+    client = MagicMock()
+    client.embed.side_effect = [
+        ConnectionError("connection reset by peer"),
+        {"embeddings": [[0.5]]},
+    ]
+    emb._client = client
+
+    with patch("rag.store.time.sleep"):
+        out = emb.embed_documents(["hello"])
+    assert out == [[0.5]]
+    assert client.embed.call_count == 2
+
+
 def test_read_plaintext(sample_txt: Path) -> None:
     text = read_plaintext(sample_txt)
     assert "Spiking transformers" in text
@@ -137,6 +173,33 @@ def test_similarity_search_returns_documents(tmp_path: Path) -> None:
     assert "spiking" in results[0].page_content
 
 
+def test_overview_query_prefers_front_matter(tmp_path: Path) -> None:
+    """Appendix prompts mentioning 'summary of the paper' must not beat the abstract."""
+    store = _make_store(tmp_path)
+    store.add_documents(
+        [
+            Document(
+                page_content=(
+                    "Effective Strategies for Agents. Abstract: We propose CAID, "
+                    "a multi-agent framework for asynchronous software engineering."
+                ),
+                metadata={"source": "p.pdf", "position": 0, "title": "CAID"},
+            ),
+            Document(
+                page_content=(
+                    "Provide engineers with a detailed summary of the paper based "
+                    "on your exploration of the overall structure of the paper."
+                ),
+                metadata={"source": "p.pdf", "position": 170, "title": "CAID"},
+            ),
+        ]
+    )
+    results = store.similarity_search("What is the paper about?", k=2)
+    assert results
+    assert "CAID" in results[0].page_content
+    assert "Abstract" in results[0].page_content
+
+
 def test_web_search_without_key_explains_setup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -146,6 +209,35 @@ def test_web_search_without_key_explains_setup(
     with patch("rag.graph.tavily_configured", return_value=False):
         out = build_web_search_node()(initial_rag_state("What is spiking?"))
     assert "TAVILY_API_KEY" in out["answer"]
+    assert "Upload" in out["answer"]
+
+
+def test_grade_keeps_retrieval_when_tavily_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rag.graph import build_grade_documents_node
+
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    fake_response = MagicMock()
+    fake_response.content = "no"
+    with (
+        patch("rag.graph.tavily_configured", return_value=False),
+        patch("rag.graph._chat_model") as chat_model,
+    ):
+        chat_model.return_value.invoke.return_value = fake_response
+        # GRADE_PROMPT | model uses model as runnable; patch the chain invoke path
+        with patch("rag.graph.GRADE_PROMPT") as prompt:
+            chain = MagicMock()
+            chain.invoke.return_value = fake_response
+            prompt.__or__.return_value = chain
+            out = build_grade_documents_node()(
+                {
+                    **initial_rag_state("What is spiking?"),
+                    "documents": ["spiking transformers use spikes"],
+                }
+            )
+    assert out["needs_web"] == "no"
+    assert "spiking transformers" in out["context"]
 
 
 def test_crag_graph_routes_to_web_when_docs_irrelevant(
@@ -256,7 +348,7 @@ def test_rag_engine_ingest_and_reply(tmp_path: Path, sample_txt: Path) -> None:
     assert len(engine.history) == 1
 
 
-def test_rag_engine_reset_clears_history_and_store(
+def test_rag_engine_reset_keeps_index_by_default(
     tmp_path: Path, sample_txt: Path
 ) -> None:
     store = _make_store(tmp_path)
@@ -267,7 +359,24 @@ def test_rag_engine_reset_clears_history_and_store(
     )
     engine.ingest_files([sample_txt])
     engine.history.append(("hello", "world"))
+    before = store.count()
     engine.reset()
+
+    assert engine.history == []
+    assert store.count() == before > 0
+
+
+def test_rag_engine_reset_can_clear_index(
+    tmp_path: Path, sample_txt: Path
+) -> None:
+    store = _make_store(tmp_path)
+    engine = RAGEngine(
+        store=store,
+        history_path=tmp_path / "history.json",
+        sync_graph_db=False,
+    )
+    engine.ingest_files([sample_txt])
+    engine.reset(clear_index=True)
 
     assert engine.history == []
     assert store.count() == 0

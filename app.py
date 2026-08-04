@@ -14,7 +14,6 @@ FastAPI process (engines + Gradio + MCP).
 
 from __future__ import annotations
 
-import uuid
 from functools import lru_cache
 
 from chatbot.engine import ChatEngine, default_checkpoint_for
@@ -22,6 +21,9 @@ from rag.engine import RAGEngine
 
 DEFAULT_STT_BACKEND = "google"
 CHECKPOINT_ROOT = "checkpoints"
+# Stable session so Index + chat share one Chroma store (Gradio State UUIDs
+# were regenerating and querying empty indexes).
+GRADIO_RAG_SESSION = "gradio"
 
 
 @lru_cache(maxsize=4)
@@ -102,7 +104,9 @@ def respond(
         return history, ""
 
     if chat_mode == "rag":
-        reply = get_rag_engine(session_id).generate_reply(message)
+        reply = get_rag_engine(session_id or GRADIO_RAG_SESSION).generate_reply(
+            message
+        )
     else:
         try:
             engine = get_engine(chat_mode)
@@ -122,9 +126,12 @@ def respond(
 
 
 def reset_chat(chat_mode: str, session_id: str) -> list[dict]:
-    """Clear the engine's conversation memory and the visible chat."""
+    """Clear the engine's conversation memory and the visible chat.
+
+    Does not delete the RAG vector index — re-index only when uploading new docs.
+    """
     if chat_mode == "rag":
-        get_rag_engine(session_id).reset()
+        get_rag_engine(session_id or GRADIO_RAG_SESSION).reset(clear_index=False)
     else:
         try:
             get_engine(chat_mode).reset()
@@ -139,7 +146,7 @@ def ingest_documents(files, session_id: str) -> str:
         return "Upload one or more .txt or .pdf files to index."
 
     paths = [f.name for f in files]
-    return get_rag_engine(session_id).ingest_files(paths)
+    return get_rag_engine(session_id or GRADIO_RAG_SESSION).ingest_files(paths)
 
 
 def history_to_messages(engine: ChatEngine) -> list[dict]:
@@ -154,7 +161,7 @@ def history_to_messages(engine: ChatEngine) -> list[dict]:
 def load_messages(chat_mode: str, session_id: str) -> list[dict]:
     """Load a mode's persisted conversation for display in the UI."""
     if chat_mode == "rag":
-        engine = get_rag_engine(session_id)
+        engine = get_rag_engine(session_id or GRADIO_RAG_SESSION)
         return history_to_messages_rag(engine)
     try:
         return history_to_messages(get_engine(chat_mode))
@@ -194,7 +201,7 @@ def build_demo():
             "or use **RAG** mode to upload `.txt` / `.pdf` documents and ask "
             "questions with a local Ollama model (synced to Postgres/Neo4j when available)."
         )
-        session_id = gr.State(value=lambda: str(uuid.uuid4()))
+        session_id = gr.State(GRADIO_RAG_SESSION)
 
         with gr.Row():
             chat_mode = gr.Dropdown(

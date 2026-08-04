@@ -91,7 +91,7 @@ docker compose up -d
 python scripts/init_db.py
 ```
 
-- **Postgres** (`localhost:5432`): structured source of truth (`db/schema.sql`)
+- **Postgres** (`localhost:5433`): structured source of truth (`db/schema.sql`; host port 5433 avoids clashing with a local Postgres on 5432)
 - **Neo4j** Browser: `http://localhost:7474` (bolt `7687`) — graph for Graph RAG traversal
 
 Node types: `Paper`, `Author`, `Chunk`, `Concept`, `Venue`, `Dataset`, `Institution`

@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: rag
       POSTGRES_DB: academic_rag
     ports:
-      - "5432:5432"
+      # Host 5433 avoids clashing with a local Homebrew/Postgres.app on 5432.
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -30,6 +30,7 @@ langchain-ollama>=0.2
 langchain-text-splitters>=0.3
 langchain-tavily>=0.2
 chromadb>=0.5
+ollama>=0.4
 python-dotenv>=1.0
 pypdf>=4.0
 psycopg[binary]>=3.1

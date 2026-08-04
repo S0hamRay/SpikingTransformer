@@ -19,10 +19,11 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a helpful assistant. Answer the user's question using only "
-            "the provided context (uploaded documents and/or web search results). "
-            "If the answer is not in the context, say you don't know based on the "
-            "available sources.",
+            "You answer questions about academic papers using the provided context "
+            "(title/abstract/excerpts and/or web search). Synthesize a clear answer "
+            "from related context even if it is partial. Quote concrete details "
+            "(title, methods, claims) when present. Only say you don't know if the "
+            "context is clearly unrelated to the question.",
         ),
         (
             "human",
@@ -99,27 +100,40 @@ def build_retrieve_node(store: VectorStore, top_k: int = DEFAULT_TOP_K):
 
 
 def build_grade_documents_node():
-    """Filter retrieved chunks; flag web search when none are relevant."""
+    """Filter retrieved chunks; flag web search when none are relevant.
+
+    When Tavily is not configured, keep the original retrieval if the grader
+    rejects everything so local RAG still answers instead of hard-failing.
+    """
 
     def grade_documents(state: RAGState) -> dict:
         question = state["question"]
-        documents = state.get("documents") or []
-        if not any(d.strip() for d in documents):
+        documents = [d for d in (state.get("documents") or []) if d.strip()]
+        if not documents:
             return {"documents": [], "context": "", "needs_web": "yes"}
 
         grader = GRADE_PROMPT | _chat_model(temperature=0.0)
         kept: list[str] = []
         for document in documents:
-            if not document.strip():
-                continue
             response = grader.invoke({"document": document, "question": question})
             if _is_yes(str(response.content)):
                 kept.append(document)
 
+        if kept:
+            return {
+                "documents": kept,
+                "context": "\n\n".join(kept),
+                "needs_web": "no",
+            }
+
+        # No graded-relevant chunks. Only escalate to web search when available;
+        # otherwise answer from the raw retrieval (better than a dead-end).
+        if tavily_configured():
+            return {"documents": [], "context": "", "needs_web": "yes"}
         return {
-            "documents": kept,
-            "context": "\n\n".join(kept),
-            "needs_web": "yes" if not kept else "no",
+            "documents": documents,
+            "context": "\n\n".join(documents),
+            "needs_web": "no",
         }
 
     return grade_documents
@@ -154,9 +168,10 @@ def build_web_search_node(*, max_results: int = 3):
                 return {}
             return {
                 "answer": (
-                    "Retrieved documents were not relevant enough to answer, and "
-                    "web search is unavailable. Set TAVILY_API_KEY in your .env "
-                    "file (copy from .env.example) to enable corrective web search."
+                    "No indexed documents matched this question, and web search "
+                    "is unavailable. Upload .txt / .pdf files and click "
+                    "Index documents, or set TAVILY_API_KEY in .env to enable "
+                    "corrective web search."
                 )
             }
 
