@@ -28,11 +28,53 @@ When Postgres and Neo4j are running, ingested documents are also written into an
    ```
    Get a key at [tavily.com](https://tavily.com). Without it, RAG still works from uploaded docs; web-search correction is disabled.
 
-### Run RAG chat
+### Run the API (engines + Gradio + MCP)
+
+Chat, RAG, and graph engines are exposed through a FastAPI service. The Gradio
+UI is mounted as a sub-app (not a standalone Gradio server). Graph RAG routes
+are also published as MCP tools via [fastapi-mcp](https://github.com/tadata-org/fastapi_mcp):
 
 ```bash
-python app.py
+python -m api.server
+# or: python app.py
 ```
+
+| Surface | URL |
+|---------|-----|
+| Gradio UI | http://127.0.0.1:8000/ |
+| OpenAPI docs | http://127.0.0.1:8000/docs |
+| MCP server | http://127.0.0.1:8000/mcp |
+
+**MCP tools** (auto-generated from FastAPI `operation_id`s):
+
+| Tool | Behavior |
+|------|----------|
+| `rag_query` | Corrective RAG answer for a question |
+| `rag_ingest` | Index a `.txt` / `.pdf` paper by filesystem path |
+| `graph_query` | Traverse Paper/Author/Concept (Cypher or natural language) |
+| `run_community_detection` | Run Leiden; return modularity / community stats |
+
+Example HTTP calls:
+
+```bash
+curl -X POST http://127.0.0.1:8000/rag/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"file_path":"/path/to/paper.pdf"}'
+
+curl -X POST http://127.0.0.1:8000/rag/query \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What attention variants are discussed?"}'
+
+curl -X POST http://127.0.0.1:8000/graph/query \
+  -H 'Content-Type: application/json' \
+  -d '{"cypher_or_natural_language":"MATCH (p:Paper)-[:USES_METHOD]->(c:Concept) RETURN p.title, c.name LIMIT 10"}'
+
+curl -X POST http://127.0.0.1:8000/graph/community-detection \
+  -H 'Content-Type: application/json' \
+  -d '{"gamma":1.5}'
+```
+
+In the Gradio UI (`/`):
 
 1. Select **RAG** from the **Chat mode** dropdown.
 2. Upload one or more `.txt` / `.pdf` files and click **Index documents**.

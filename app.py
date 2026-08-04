@@ -1,27 +1,21 @@
 """Gradio web chatbot with selectable attention and voice input.
 
-Launches a browser chat UI where you can:
+The UI is built by :func:`build_demo` and served as a FastAPI sub-app at
+``/`` (see :mod:`api.server`). Prefer:
 
-* pick the attention variant (spiking or standard) from a dropdown,
-* use RAG mode to upload plaintext documents and chat with Ollama,
-* type a message, or
-* record a message with your microphone and transcribe it to text.
+    python -m api.server
+    # Gradio UI → http://127.0.0.1:8000/
+    # OpenAPI   → http://127.0.0.1:8000/docs
+    # MCP       → http://127.0.0.1:8000/mcp
 
-Run with:
-    python app.py
-
-The microphone is captured by the browser (via Gradio), so no system audio
-libraries are required for the web UI; transcription uses the SpeechRecognition
-backend configured below.
+``python app.py`` remains a compatibility entry point that starts the same
+FastAPI process (engines + Gradio + MCP).
 """
 
 from __future__ import annotations
 
-import argparse
 import uuid
 from functools import lru_cache
-
-from dotenv import load_dotenv
 
 from chatbot.engine import ChatEngine, default_checkpoint_for
 from rag.engine import RAGEngine
@@ -190,7 +184,7 @@ def toggle_rag_ui(chat_mode: str, gr):
 
 
 def build_demo():
-    """Construct the Gradio Blocks demo."""
+    """Construct the Gradio Blocks demo (mounted by FastAPI at ``/``)."""
     import gradio as gr
 
     with gr.Blocks(title="Spiking vs Standard Attention Chatbot") as demo:
@@ -258,16 +252,10 @@ def build_demo():
 
 
 def main() -> None:
-    """Launch the web UI."""
-    load_dotenv()
-    parser = argparse.ArgumentParser(description="Launch the chatbot web UI.")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=7860)
-    parser.add_argument("--share", action="store_true", help="Create a public link.")
-    args = parser.parse_args()
+    """Launch FastAPI with Gradio mounted at ``/`` and MCP at ``/mcp``."""
+    from api.server import main as serve
 
-    demo = build_demo()
-    demo.launch(server_name=args.host, server_port=args.port, share=args.share)
+    serve()
 
 
 if __name__ == "__main__":
