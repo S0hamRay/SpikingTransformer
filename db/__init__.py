@@ -7,6 +7,7 @@ from db.leiden import LeidenError, LeidenStats, run_leiden
 from db.neo4j_store import Neo4jGraphStore
 from db.postgres_store import PostgresStore
 from db.sync import sync_paper_ingest
+from db.viz import render_graph_view
 
 __all__ = [
     "ExtractedEntity",
@@ -19,6 +20,7 @@ __all__ = [
     "PostgresStore",
     "extract_entities",
     "leiden_gamma",
+    "render_graph_view",
     "run_graph_query",
     "run_leiden",
     "sync_enabled",

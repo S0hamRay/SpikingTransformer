@@ -14,6 +14,8 @@ PyYAML>=6.0
 
 # Chatbot interface
 gradio>=4.0
+plotly>=5.18
+networkx>=3.0
 
 # FastAPI service + auto-generated MCP server
 # fastapi-mcp 0.4.x is incompatible with mcp 2.x (Server() arity change).

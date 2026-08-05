@@ -190,6 +190,48 @@ def toggle_rag_ui(chat_mode: str, gr):
     )
 
 
+def refresh_graph_view(
+    view: str,
+    max_nodes: int,
+    include_chunks: bool,
+):
+    """Load Neo4j data into a Plotly figure for the Graph tab."""
+    from db.viz import render_graph_view
+
+    return render_graph_view(
+        view=view,
+        max_nodes=int(max_nodes),
+        include_chunks=bool(include_chunks),
+    )
+
+
+def run_leiden_and_refresh(
+    view: str,
+    max_nodes: int,
+    include_chunks: bool,
+    gamma: float,
+):
+    """Run Leiden community detection, then refresh the graph plot."""
+    from db.leiden import LeidenError, run_leiden
+
+    try:
+        stats = run_leiden(gamma=float(gamma) if gamma is not None else None)
+        status = stats.format_summary()
+    except LeidenError as exc:
+        status = f"Leiden failed: {exc}"
+    except Exception as exc:  # noqa: BLE001
+        status = f"Leiden failed: {exc}"
+
+    # Prefer the communities view after a successful clustering run.
+    view_after = (
+        "Communities"
+        if status.startswith("Leiden communities")
+        else view
+    )
+    fig, stats_md = refresh_graph_view(view_after, max_nodes, include_chunks)
+    return fig, stats_md, status, view_after
+
+
 def build_demo():
     """Construct the Gradio Blocks demo (mounted by FastAPI at ``/``)."""
     import gradio as gr
@@ -203,57 +245,124 @@ def build_demo():
         )
         session_id = gr.State(GRADIO_RAG_SESSION)
 
-        with gr.Row():
-            chat_mode = gr.Dropdown(
-                choices=["spiking", "standard", "rag"],
-                value="spiking",
-                label="Chat mode",
-            )
+        with gr.Tabs():
+            with gr.Tab("Chat"):
+                with gr.Row():
+                    chat_mode = gr.Dropdown(
+                        choices=["spiking", "standard", "rag"],
+                        value="spiking",
+                        label="Chat mode",
+                    )
 
-        with gr.Row(visible=False) as rag_row:
-            doc_upload = gr.File(
-                file_count="multiple",
-                file_types=[".txt", ".pdf"],
-                label="Upload documents (.txt / .pdf)",
-            )
-            index_btn = gr.Button("Index documents", variant="secondary")
-            ingest_status = gr.Markdown("")
+                with gr.Row(visible=False) as rag_row:
+                    doc_upload = gr.File(
+                        file_count="multiple",
+                        file_types=[".txt", ".pdf"],
+                        label="Upload documents (.txt / .pdf)",
+                    )
+                    index_btn = gr.Button("Index documents", variant="secondary")
+                    ingest_status = gr.Markdown("")
 
-        chatbot = gr.Chatbot(height=380, label="Conversation")
-        with gr.Row():
-            msg = gr.Textbox(
-                placeholder="Type a message and press Enter...",
-                label="Message",
-                scale=4,
-            )
-            send = gr.Button("Send", variant="primary", scale=1)
-        with gr.Row(visible=True) as voice_row:
-            mic = gr.Audio(
-                sources=["microphone"], type="numpy", label="Or speak a message"
-            )
-            transcribe_btn = gr.Button("Transcribe to message box")
-        clear = gr.Button("Clear conversation")
+                chatbot = gr.Chatbot(height=380, label="Conversation")
+                with gr.Row():
+                    msg = gr.Textbox(
+                        placeholder="Type a message and press Enter...",
+                        label="Message",
+                        scale=4,
+                    )
+                    send = gr.Button("Send", variant="primary", scale=1)
+                with gr.Row(visible=True) as voice_row:
+                    mic = gr.Audio(
+                        sources=["microphone"],
+                        type="numpy",
+                        label="Or speak a message",
+                    )
+                    transcribe_btn = gr.Button("Transcribe to message box")
+                clear = gr.Button("Clear conversation")
 
-        send.click(
-            respond,
-            [msg, chatbot, chat_mode, session_id],
-            [chatbot, msg],
-        )
-        msg.submit(
-            respond,
-            [msg, chatbot, chat_mode, session_id],
-            [chatbot, msg],
-        )
-        index_btn.click(ingest_documents, [doc_upload, session_id], [ingest_status])
-        transcribe_btn.click(transcribe, [mic], [msg])
-        clear.click(reset_chat, [chat_mode, session_id], [chatbot])
-        chat_mode.change(
-            lambda mode: toggle_rag_ui(mode, gr),
-            [chat_mode],
-            [rag_row, doc_upload, ingest_status, voice_row, transcribe_btn],
-        )
-        chat_mode.change(load_messages, [chat_mode, session_id], [chatbot])
-        demo.load(load_messages, [chat_mode, session_id], [chatbot])
+                send.click(
+                    respond,
+                    [msg, chatbot, chat_mode, session_id],
+                    [chatbot, msg],
+                )
+                msg.submit(
+                    respond,
+                    [msg, chatbot, chat_mode, session_id],
+                    [chatbot, msg],
+                )
+                index_btn.click(
+                    ingest_documents, [doc_upload, session_id], [ingest_status]
+                )
+                transcribe_btn.click(transcribe, [mic], [msg])
+                clear.click(reset_chat, [chat_mode, session_id], [chatbot])
+                chat_mode.change(
+                    lambda mode: toggle_rag_ui(mode, gr),
+                    [chat_mode],
+                    [rag_row, doc_upload, ingest_status, voice_row, transcribe_btn],
+                )
+                chat_mode.change(load_messages, [chat_mode, session_id], [chatbot])
+                demo.load(load_messages, [chat_mode, session_id], [chatbot])
+
+            with gr.Tab("Knowledge graph"):
+                gr.Markdown(
+                    "Interactive view of the Neo4j academic graph. "
+                    "**Knowledge graph** shows Paper / Author / Concept links. "
+                    "**Communities** colors nodes by Leiden clusters "
+                    "(run Leiden after ingesting papers)."
+                )
+                with gr.Row():
+                    graph_view = gr.Dropdown(
+                        choices=["Knowledge graph", "Communities"],
+                        value="Knowledge graph",
+                        label="View",
+                        scale=2,
+                    )
+                    max_nodes = gr.Slider(
+                        minimum=20,
+                        maximum=200,
+                        value=80,
+                        step=10,
+                        label="Max nodes",
+                        scale=2,
+                    )
+                    include_chunks = gr.Checkbox(
+                        value=False,
+                        label="Include Chunk nodes",
+                        scale=1,
+                    )
+                with gr.Row():
+                    refresh_btn = gr.Button("Refresh graph", variant="primary")
+                    gamma = gr.Number(
+                        value=1.0,
+                        label="Leiden gamma",
+                        precision=2,
+                    )
+                    leiden_btn = gr.Button("Run Leiden", variant="secondary")
+                graph_plot = gr.Plot(label="Graph")
+                with gr.Row():
+                    graph_stats = gr.Markdown("### Graph stats\n_Click Refresh graph._")
+                    leiden_status = gr.Markdown("")
+
+                refresh_btn.click(
+                    refresh_graph_view,
+                    [graph_view, max_nodes, include_chunks],
+                    [graph_plot, graph_stats],
+                )
+                graph_view.change(
+                    refresh_graph_view,
+                    [graph_view, max_nodes, include_chunks],
+                    [graph_plot, graph_stats],
+                )
+                leiden_btn.click(
+                    run_leiden_and_refresh,
+                    [graph_view, max_nodes, include_chunks, gamma],
+                    [graph_plot, graph_stats, leiden_status, graph_view],
+                )
+                demo.load(
+                    refresh_graph_view,
+                    [graph_view, max_nodes, include_chunks],
+                    [graph_plot, graph_stats],
+                )
 
     return demo
 

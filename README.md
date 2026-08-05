@@ -79,6 +79,7 @@ In the Gradio UI (`/`):
 1. Select **RAG** from the **Chat mode** dropdown.
 2. Upload one or more `.txt` / `.pdf` files and click **Index documents**.
 3. Ask questions about the uploaded content.
+4. Open the **Knowledge graph** tab to visualize Paper/Author/Concept links and Leiden communities (Refresh graph / Run Leiden).
 
 RAG session data (vectors and chat history) is stored under `rag_data/<session_id>/`.
 
